@@ -1,0 +1,592 @@
+import React, { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { 
+  Scan, Route, Trash2, Box, Leaf, Layers, 
+  Activity, Droplets, Zap, Clock, Ruler, Maximize,
+  Cpu, Radar, BrainCircuit, Hand, Grab, Loader, AlignJustify,
+  Play, Pause, Undo2, Sun, ShoppingCart, FileText, Wrench, X, Sparkles, ChevronRight, Move, Headset,
+  BookOpen, CheckCircle, Sprout, Cherry, Scaling, Navigation
+} from 'lucide-react';
+
+const ASSEMBLY_STEPS = [
+  { step: 1, title: 'Base Framework', tools: 'Rubber Mallet, Tape Measure', desc: 'Secure load-bearing vertical framing profiles.', lines: ['• Layout and connect main structural vertical beams', '• Install dual-axis adjustable leveling feet', '• Verify base footprints match spatial floorplan'] },
+  { step: 2, title: 'Structural Bracing', tools: 'Hex Allen Keys, Spirit Level', desc: 'Install horizontal cross-bracing for stability.', lines: ['• Attach horizontal cross-bars between vertical posts', '• Use spirit level to cross-reference alignment on X/Z planes', '• Tighten all T-nuts and gusset brackets to torque spec'] },
+  { step: 3, title: 'Mounting Hardware', tools: 'Screwdriver, Spacing Jig', desc: 'Fix rigid pipe support collars and clips.', lines: ['• Attach heavy-duty split-ring hangers to framework', '• Position support nodes at calibrated tier offsets', '• Lock collar brackets at natural gravity slide points'] },
+  { step: 4, title: 'Growth Channels', tools: 'Alignment Pins, Level Tool', desc: 'Seat the primary PVC growth chambers.', lines: ['• Seat straight white PVC growth channels into collars', '• Verify 3% gravity gradient slope for natural drain', '• Fasten quick-release mechanical retaining pins'] },
+  { step: 5, title: 'PVC Joints & Caps', tools: 'PVC Solvent, Priming Cement', desc: 'Mount sweep elbow joints and endcaps.', lines: ['• Apply solvent cement to straight pipe connections', '• Fit and lock watertight custom PVC endcaps', '• Attach 180-degree sweep U-bends on alternating tiers'] },
+  { step: 6, title: 'Nutrient Reservoir', tools: 'Power Drill, 2" Hole Saw', desc: 'Position reservoir tank and fit master lid.', lines: ['• Center 100-liter reservoir directly below drainage zone', '• Seal main lid and drill access ports for plumbing lines', '• Set air stones on tank floor for root oxygenation'] },
+  { step: 7, title: 'Drainage Return', tools: 'Nut Driver, Drainage Adapters', desc: 'Install gravity collection gutters and drop lines.', lines: ['• Secure collector gutters under low drainage endcaps', '• Route primary 2" grey PVC drop lines into tank lid', '• Secure high-flow bulkhead exit fittings'] },
+  { step: 8, title: 'Active Feed Lines', tools: 'Hose Cutters, Submersible Pump', desc: 'Route high-pressure pump feed lines.', lines: ['• Connect submersible pump to vertical blue riser line', '• Install high-pressure manifold along top tier frame', '• Route black micro-drip tubes directly into endcap nozzles'] },
+  { step: 9, title: 'IoT Sensors & Data', tools: 'pH Pen, EC Meter, Probe Brackets', desc: 'Calibrate telemetry & water quality probes.', lines: ['• Mount pH, EC, and water temperature sensors to lid', '• Connect data cables to watertight controller hub', '• Calibrate holographic display using reference solutions'] },
+  { step: 10, title: 'Biological Loading', tools: '2" Net Pots, LECA Clay Pebbles', desc: 'Load medium and transplant seedlings.', lines: ['• Fill 2" net pots with expanded clay pebbles (LECA)', '• Seat established seedlings with root crowns high', '• Insert net pots into channels; initialize grow cycle'] }
+];
+
+// --- STYLED COMPONENTS (2D OVERLAY) ---
+const SidebarPanel = ({ title, icon: Icon, children, className = "" }) => (
+  <div className={`bg-slate-900/95 border border-slate-800/80 backdrop-blur-xl rounded-2xl p-4 shadow-xl pointer-events-auto transition-all duration-300 hover:shadow-2xl hover:border-slate-700/60 text-white ${className}`}>
+    <h3 className={`text-slate-400 text-[11px] font-bold tracking-[0.15em] mb-3 uppercase flex items-center gap-2 border-b border-slate-800 pb-2`}>
+      {Icon && <Icon size={14} className="text-slate-400" />} {title}
+    </h3>
+    {children}
+  </div>
+);
+
+const ActionButton = ({ active, onClick, icon: Icon, label, color = "blue" }) => {
+  const baseClasses = "flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all duration-200 gap-1.5 w-full shadow-sm";
+  const colors = {
+    blue: active ? "bg-sky-500 border-sky-400 text-white shadow-inner scale-95" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:border-slate-650",
+    emerald: active ? "bg-emerald-600 border-emerald-500 text-white shadow-inner scale-95" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:border-slate-650",
+    amber: active ? "bg-amber-600 border-amber-500 text-white shadow-inner scale-95" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:border-slate-650",
+    red: active ? "bg-rose-600 border-rose-500 text-white shadow-inner scale-95" : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-750 hover:border-slate-650",
+  };
+  return (
+    <button onClick={onClick} className={`${baseClasses} ${colors[color]}`}>
+      <Icon size={18} />
+      <span className="text-[10px] font-semibold">{label}</span>
+    </button>
+  );
+};
+
+export default function AppMVP4() {
+  const mountRef = useRef(null);
+  
+  // State
+  const [activeConfig, setActiveConfig] = useState('ZIG-ZAG');
+  const [activePlant, setActivePlant] = useState('LETTUCE');
+  const [sysWidth, setSysWidth] = useState(2.2);
+  const [sysTiers, setSysTiers] = useState(5);
+  const [growthMonth, setGrowthMonth] = useState(0);
+  const [autoLevel, setAutoLevel] = useState(true);
+  const [bom, setBom] = useState({ length: 0, elbows: 0, plants: 0, systems: 0, pvcPipes: 0, tanks: 0, pumps: 0 });
+  const [isARActive, setIsARActive] = useState(false);
+  const [arSupported, setArSupported] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [isTimeAnimating, setIsTimeAnimating] = useState(false);
+  const [timeOfDay, setTimeOfDay] = useState(12); 
+  const [assemblyStep, setAssemblyStep] = useState(10); 
+  const [isEraserMode, setIsEraserMode] = useState(false);
+  const [isMoveMode, setIsMoveMode] = useState(false);
+
+  // Mutable Refs for Engine
+  const configRef = useRef('ZIG-ZAG');
+  const plantRef = useRef('LETTUCE');
+  const widthRef = useRef(2.2);
+  const tiersRef = useRef(5);
+  const growthRef = useRef(0);
+  const timeRef = useRef(12);
+  
+  const engineRef = useRef({
+    renderer: null, scene: null, camera: null,
+    points: [new THREE.Vector3(0, 0, 0)],
+    uiPanels: [], rightController: null, leftController: null, paletteGroup: null, guideGroup: null,
+    ghostPipe: null, instructionSprite: null, sunLight: null, scannerLaser: null, 
+    particles: null, waterBubbles: [], iotDisplays: [], rebuildRequired: true, 
+    isEraserMode: false, isMoveMode: false, isScanning: false, assemblyGroup: null, grid: null, floor: null,
+    lastAssemblyStep: 0, guideVisible: true, toggleGuideBtn: null, aiVisualizer: null, aiText: null,
+    placementReticle: null, flowTexture: null, spatialScannerGroup: null, realPlaneGroup: null,
+    
+    // Spatial SDK Rigidbody & Scanning State
+    physicsCurrentPos: new THREE.Vector3(0, 0, 0),
+    physicsVelocity: new THREE.Vector3(0, 0, 0),
+    grabbedState: 'STATIC', 
+    realFloorBounds: null,
+    realWorldPlanesActive: false
+  });
+
+  // Sync State to Refs
+  useEffect(() => { configRef.current = activeConfig; engineRef.current.rebuildRequired = true; }, [activeConfig]);
+  useEffect(() => { plantRef.current = activePlant; engineRef.current.rebuildRequired = true; }, [activePlant]);
+  useEffect(() => { widthRef.current = sysWidth; engineRef.current.rebuildRequired = true; }, [sysWidth]);
+  useEffect(() => { tiersRef.current = sysTiers; engineRef.current.rebuildRequired = true; }, [sysTiers]);
+  useEffect(() => { growthRef.current = growthMonth; engineRef.current.rebuildRequired = true; }, [growthMonth]);
+  useEffect(() => { engineRef.current.isEraserMode = isEraserMode; }, [isEraserMode]);
+  useEffect(() => { engineRef.current.isMoveMode = isMoveMode; }, [isMoveMode]);
+  useEffect(() => { timeRef.current = timeOfDay; }, [timeOfDay]);
+  useEffect(() => { engineRef.current.assemblyStep = assemblyStep; engineRef.current.rebuildRequired = true; }, [assemblyStep]);
+  useEffect(() => { engineRef.current.isAnimating = isAnimating; }, [isAnimating]);
+  useEffect(() => { engineRef.current.isTimeAnimating = isTimeAnimating; }, [isTimeAnimating]);
+
+  // Timers
+  useEffect(() => {
+    let interval;
+    if (isAnimating) interval = setInterval(() => setGrowthMonth(prev => prev >= 12 ? (setIsAnimating(false), 12) : prev + 0.15), 50); 
+    return () => clearInterval(interval);
+  }, [isAnimating]);
+
+  useEffect(() => {
+    let interval;
+    if (isTimeAnimating) interval = setInterval(() => setTimeOfDay(prev => prev >= 18 ? 6 : prev + 0.05), 50);
+    return () => clearInterval(interval);
+  }, [isTimeAnimating]);
+
+  // --- SPATIAL SDK AUTO LAYOUT SCANNER ENGINE ---
+  const triggerAutoDesign = () => {
+    if (engineRef.current.isScanning) return; 
+    engineRef.current.isScanning = true;
+    setIsScanning(true);
+    
+    if (engineRef.current.aiText) engineRef.current.aiText.userData.updateText("SCANNING REAL SPATIAL MESH...", '#f59e0b');
+    
+    if (engineRef.current.spatialScannerGroup) {
+        engineRef.current.spatialScannerGroup.visible = !engineRef.current.realWorldPlanesActive; // Only show generic scanner if real planes failed
+        engineRef.current.spatialScannerGroup.scale.set(0.1, 0.1, 0.1);
+    }
+    
+    // Simulate processing delay for dramatic effect while the real planes animate
+    setTimeout(() => {
+      const config = configRef.current; 
+      const w = widthRef.current;
+      const spacingX = w + 0.6; // Width + walk aisle
+      const spacingZ = 1.2;     // Depth gap
+      const optimizedPoints = [];
+
+      let rows = 2; let cols = 2;
+      let centerX = 0; let centerZ = -2.0;
+
+      // 🌐 REAL-WORLD SPATIAL MATH INJECTION 🌐
+      if (engineRef.current.realFloorBounds && engineRef.current.renderer.xr.isPresenting) {
+          const bounds = engineRef.current.realFloorBounds;
+          centerX = bounds.center.x;
+          centerZ = bounds.center.z;
+          
+          // Calculate max physical units that can fit inside the real room dimensions
+          cols = Math.max(1, Math.floor((bounds.width * 0.9) / spacingX)); // Use 90% of floor space
+          rows = Math.max(1, Math.floor((bounds.depth * 0.9) / spacingZ));
+          
+          if (engineRef.current.aiText) {
+              engineRef.current.aiText.userData.updateText(`PHYSICAL ROOM MATCH: ${cols * rows} SYSTEMS`, '#10b981');
+          }
+      } else {
+          // Fallback if not in AR or planes not detected
+          if (config === 'TOWERS') { rows = 2; cols = 3; }
+          else if (config === 'HORIZ-BED' || config === 'ZIG-ZAG') { rows = 2; cols = 2; }
+      }
+
+      if (config === 'BIOMESH') {
+          optimizedPoints.push(new THREE.Vector3(-1.5 + centerX, 0.5, -1 + centerZ)); 
+          optimizedPoints.push(new THREE.Vector3(1.5 + centerX, 0.4, -1 + centerZ)); 
+          optimizedPoints.push(new THREE.Vector3(1.5 + centerX, 0.3, 0 + centerZ));
+          optimizedPoints.push(new THREE.Vector3(-1.5 + centerX, 0.2, 0 + centerZ)); 
+          optimizedPoints.push(new THREE.Vector3(-1.5 + centerX, 0.1, 1 + centerZ)); 
+          optimizedPoints.push(new THREE.Vector3(1.5 + centerX, 0.0, 1 + centerZ));
+      } else {
+          for(let r=0; r<rows; r++) {
+            for(let c=0; c<cols; c++) {
+               const offsetX = centerX + (c - (cols-1)/2) * spacingX;
+               const offsetZ = centerZ + (r - (rows-1)/2) * spacingZ; 
+               optimizedPoints.push(new THREE.Vector3(offsetX, 0, offsetZ));
+            }
+          }
+      }
+      
+      engineRef.current.points = optimizedPoints; 
+      engineRef.current.rebuildRequired = true; 
+      
+      engineRef.current.isScanning = false;
+      setIsScanning(false);
+      
+      if (engineRef.current.spatialScannerGroup) engineRef.current.spatialScannerGroup.visible = false;
+      
+      if (!engineRef.current.realFloorBounds || !engineRef.current.renderer.xr.isPresenting) {
+         if (engineRef.current.aiText) engineRef.current.aiText.userData.updateText(`FALLBACK LAYOUT: ${optimizedPoints.length} SYSTEMS`, '#10b981');
+      }
+      
+      setTimeout(() => {
+          if (engineRef.current.aiText) engineRef.current.aiText.userData.updateText("GEMINI COPILOT ACTIVE", '#38bdf8');
+      }, 4000);
+
+    }, 3500); 
+  };
+
+  // Main Engine Initialization
+  useEffect(() => {
+    if (!mountRef.current) return;
+
+    // --- SCENE SETUP ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color('#000000'); 
+    scene.fog = new THREE.FogExp2('#000000', 0.03); 
+    engineRef.current.scene = scene;
+    
+    // Fallback Grid & Floor
+    const grid = new THREE.GridHelper(30, 30, 0x1f2937, 0x111827);
+    grid.material.transparent = true; grid.material.opacity = 0.5;
+    scene.add(grid);
+    engineRef.current.grid = grid;
+
+    const shadowPlane = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: 0.3, color: 0x000000 }));
+    shadowPlane.rotation.x = -Math.PI / 2; shadowPlane.position.y = -0.01; shadowPlane.receiveShadow = true;
+    scene.add(shadowPlane);
+    engineRef.current.floor = shadowPlane; 
+    
+    // Group for True Spatial WebXR Planes
+    const realPlaneGroup = new THREE.Group();
+    scene.add(realPlaneGroup);
+    engineRef.current.realPlaneGroup = realPlaneGroup;
+
+    // Camera & Renderer
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.4, 2.5);
+    engineRef.current.camera = camera;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.xr.enabled = true;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0; 
+    mountRef.current.appendChild(renderer.domElement);
+    engineRef.current.renderer = renderer;
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.dampingFactor = 0.05; controls.maxPolarAngle = Math.PI / 2 - 0.05; 
+    controls.target.set(0, 1.1, 0);
+
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    pmremGenerator.compileEquirectangularShader();
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment()).texture;
+
+    const assemblyGroup = new THREE.Group();
+    engineRef.current.assemblyGroup = assemblyGroup;
+    scene.add(assemblyGroup);
+
+    // Particles
+    const particleGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(510); 
+    for(let i=0; i<510; i++) pPos[i] = (Math.random() - 0.5) * 15;
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+    const particles = new THREE.Points(particleGeo, new THREE.PointsMaterial({ size: 0.03, color: 0x0064FF, transparent: true, opacity: 0.3, depthWrite: false }));
+    scene.add(particles); engineRef.current.particles = particles;
+
+    // Simulated Scanner Fallback Group
+    const scannerGroup = new THREE.Group();
+    scannerGroup.visible = false;
+    scene.add(scannerGroup);
+    engineRef.current.spatialScannerGroup = scannerGroup;
+
+    const scanGrid = new THREE.GridHelper(10, 25, 0x0064FF, 0x0ea5e9);
+    scanGrid.position.y = 0.01; scanGrid.material.transparent = true; scanGrid.material.opacity = 0.8;
+    scannerGroup.add(scanGrid);
+
+    const boundingMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, wireframe: true, transparent: true, opacity: 0.6 });
+    const boundingFillMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.1 });
+    
+    const wallMesh = new THREE.Mesh(new THREE.BoxGeometry(6, 3, 0.2), boundingMat);
+    wallMesh.position.set(0, 1.5, -4); wallMesh.add(new THREE.Mesh(new THREE.BoxGeometry(6, 3, 0.2), boundingFillMat));
+    
+    const tableMesh = new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 1), boundingMat);
+    tableMesh.position.set(-2.5, 0.4, -2); tableMesh.add(new THREE.Mesh(new THREE.BoxGeometry(2, 0.8, 1), boundingFillMat));
+    scannerGroup.add(wallMesh, tableMesh);
+
+    // Spatial Targeting Reticle
+    const reticleGeo = new THREE.RingGeometry(0.28, 0.32, 32).rotateX(-Math.PI / 2);
+    const reticleMat = new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+    const reticle = new THREE.Mesh(reticleGeo, reticleMat);
+    reticle.visible = false;
+    scene.add(reticle);
+    engineRef.current.placementReticle = reticle;
+
+    // Flowing Water Texture Generator
+    const createFlowTexture = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 16; canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a'; ctx.fillRect(0,0,16,128); 
+        ctx.fillStyle = '#38bdf8'; ctx.fillRect(0,0,16,64); // Water pulse stripe
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 8);
+        return tex;
+    };
+    engineRef.current.flowTexture = createFlowTexture();
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const softFill = new THREE.PointLight(0x0064FF, 1, 15); softFill.position.set(0, 4, 0); scene.add(softFill);
+
+    const sunLight = new THREE.DirectionalLight(0xfff5e6, 2.0);
+    sunLight.castShadow = true; sunLight.shadow.bias = -0.001; 
+    sunLight.shadow.mapSize.width = 2048; sunLight.shadow.mapSize.height = 2048;
+    scene.add(sunLight); engineRef.current.sunLight = sunLight;
+
+    // --- META HORIZON OS UI ENGINE ---
+    const colorPrimary = 0x0064FF; 
+    const colorSurface = 0x292D39; 
+    const colorSurfaceHover = 0x3B404D;
+    const colorCard = 0x1A1D24; 
+    const colorPanel = 0x0A0A0A; 
+
+    const createRoundedRectShape = (width, height, radius) => {
+        const shape = new THREE.Shape();
+        const x = -width / 2, y = -height / 2;
+        shape.moveTo(x, y + radius);
+        shape.lineTo(x, y + height - radius);
+        shape.quadraticCurveTo(x, y + height, x + radius, y + height);
+        shape.lineTo(x + width - radius, y + height);
+        shape.quadraticCurveTo(x + width, y + height, x + width, y + height - radius);
+        shape.lineTo(x + width, y + radius);
+        shape.quadraticCurveTo(x + width, y, x + width - radius, y);
+        shape.lineTo(x + radius, y);
+        shape.quadraticCurveTo(x, y, x, y + radius);
+        return shape;
+    };
+
+    const createCrispTextSprite = (initialText, options = {}) => {
+        const {
+            fontsize = 64, fontface = '"Inter", sans-serif', textColor = '#F5F5F5',
+            canvasWidth = 1024, canvasHeight = 128, fontWeight = '700', 
+            physicalHeight = 0.04, align = 'center'
+        } = options;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth; canvas.height = canvasHeight;
+        const ctx = canvas.getContext('2d');
+        const texture = new THREE.CanvasTexture(canvas);
+        texture.minFilter = THREE.LinearFilter; texture.magFilter = THREE.LinearFilter; texture.anisotropy = 16;
+        
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+        sprite.raycast = () => {}; 
+
+        sprite.userData.updateText = (text, activeColor = textColor) => {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            ctx.font = `${fontWeight} ${fontsize}px ${fontface}`;
+            ctx.fillStyle = activeColor;
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = "rgba(0, 0, 0, 0.6)"; 
+            ctx.shadowBlur = 8; ctx.shadowOffsetY = 2;
+            
+            if(align === 'left') {
+                ctx.textAlign = 'left';
+                ctx.fillText(text, 20, canvasHeight / 2);
+            } else {
+                ctx.textAlign = 'center';
+                ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
+            }
+            texture.needsUpdate = true;
+        };
+        
+        sprite.userData.updateText(initialText);
+        sprite.scale.set(physicalHeight * (canvasWidth / canvasHeight), physicalHeight, 1);
+        return sprite;
+    };
+
+    const createXRCardBg = (width, height, x, y) => {
+        const shape = createRoundedRectShape(width, height, 0.03); 
+        const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.005, bevelEnabled: false });
+        geo.translate(0, 0, -0.0025);
+        const mat = new THREE.MeshPhysicalMaterial({ color: colorCard, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.95 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, 0.005);
+        mesh.raycast = () => {};
+        return mesh;
+    };
+
+    const createXRButton = (text, width, height, x, y, actionData, isPrimary = false, danger = false) => {
+        const radius = height / 2; 
+        const btnShape = createRoundedRectShape(width, height, radius);
+        const btnGeo = new THREE.ExtrudeGeometry(btnShape, { depth: 0.01, bevelEnabled: false });
+        btnGeo.translate(0, 0, -0.005); 
+
+        const dColor = isPrimary ? colorPrimary : (danger ? 0xE11D48 : colorSurface);
+        const aColor = isPrimary ? 0x0050CC : (danger ? 0xBE123C : colorPrimary);
+
+        const btnMat = new THREE.MeshPhysicalMaterial({ 
+            color: dColor, roughness: 0.3, metalness: 0.1, emissive: dColor, emissiveIntensity: 0.1 
+        });
+        
+        const btn = new THREE.Mesh(btnGeo, btnMat);
+        btn.position.set(x, y, 0.015); 
+        btn.userData = { 
+            isButton: true, isHovered: false, isClicked: false, baseZ: 0.015,
+            ...actionData, defaultColor: dColor, hoverColor: isPrimary ? 0x3385FF : colorSurfaceHover, activeColor: aColor 
+        };
+        
+        const label = createCrispTextSprite(text, { physicalHeight: height * 0.40, fontWeight: '700' });
+        label.position.set(0, 0, 0.006); 
+        btn.add(label);
+        btn.userData.labelSprite = label; 
+        
+        return btn;
+    };
+
+    const createXRTitle = (text, x, y, width) => {
+        const label = createCrispTextSprite(text, { physicalHeight: 0.03, canvasWidth: 2048, textColor: '#A8B1BD', align: 'left', fontWeight: '800' }); 
+        label.position.set(x - (width/2) + 0.04, y, 0.015); 
+        return label;
+    };
+
+    const createBlueprintSprite = (initialStepData, physicalWidth = 0.75, physicalHeight = 0.60) => {
+      const canvasWidth = 2048; const canvasHeight = 1536;
+      const canvas = document.createElement('canvas'); 
+      canvas.width = canvasWidth; canvas.height = canvasHeight; 
+      const ctx = canvas.getContext('2d');
+      const texture = new THREE.CanvasTexture(canvas); 
+      texture.minFilter = THREE.LinearFilter; texture.magFilter = THREE.LinearFilter; texture.anisotropy = 16;
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+      sprite.raycast = () => {}; 
+
+      sprite.userData.updateText = (stepData) => {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight); 
+        const fontStack = `"Inter", sans-serif`;
+        
+        ctx.fillStyle = '#1A1D24'; 
+        ctx.roundRect(0, 0, canvasWidth, canvasHeight, 32); 
+        ctx.fill();
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, canvasWidth, canvasHeight); 
+        
+        ctx.fillStyle = '#292D39'; 
+        ctx.beginPath(); ctx.roundRect(0, 0, canvasWidth, 260, [32, 32, 0, 0]); ctx.fill();
+
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top'; 
+        ctx.fillStyle = '#0064FF'; ctx.font = `800 48px ${fontStack}`; 
+        ctx.fillText(`ASSEMBLY PHASE ${stepData.step}`, 80, 60);
+
+        ctx.fillStyle = '#FFFFFF'; ctx.font = `900 80px ${fontStack}`; 
+        ctx.fillText(stepData.title.toUpperCase(), 80, 130);
+
+        ctx.fillStyle = '#A8B1BD'; ctx.font = `700 40px ${fontStack}`; 
+        ctx.fillText("REQUIRED HARDWARE:", 80, 320);
+        ctx.fillStyle = '#F5F5F5'; ctx.font = `600 40px ${fontStack}`; 
+        ctx.fillText(stepData.tools, 540, 320);
+        
+        ctx.strokeStyle = '#333333'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(80, 400); ctx.lineTo(canvasWidth - 80, 400); ctx.stroke();
+
+        ctx.fillStyle = '#E0E0E0'; ctx.font = `500 56px ${fontStack}`; 
+        stepData.lines.forEach((line, i) => { ctx.fillText(line, 80, 460 + (i * 140)); });
+        texture.needsUpdate = true;
+      };
+      
+      sprite.userData.updateText(initialStepData); 
+      sprite.scale.set(physicalWidth, physicalHeight, 1); 
+      return sprite;
+    };
+
+    const triggerHaptic = (intensity, duration) => {
+        const session = engineRef.current.renderer.xr.getSession();
+        if (session && session.inputSources) {
+            for (const source of session.inputSources) {
+                if (source.handedness === 'right' && source.gamepad && source.gamepad.hapticActuators?.length > 0) {
+                    try {
+                        source.gamepad.hapticActuators[0].pulse(intensity, duration);
+                    } catch (e) {}
+                }
+            }
+        }
+    };
+
+    // --- XR CONTROLLERS & DIRECT WRIST ATTACHMENT ---
+    const setupXRFeatures = () => {
+      const controllerModelFactory = new XRControllerModelFactory();
+      const handModelFactory = new XRHandModelFactory();
+
+      const controller0 = renderer.xr.getController(0);
+      scene.add(controller0); engineRef.current.leftController = controller0;
+      
+      const grip0 = renderer.xr.getControllerGrip(0);
+      grip0.add(controllerModelFactory.createControllerModel(grip0)); scene.add(grip0);
+      const hand0 = renderer.xr.getHand(0);
+      hand0.add(handModelFactory.createHandModel(hand0, 'mesh')); scene.add(hand0);
+
+      const panelGlassMat = new THREE.MeshPhysicalMaterial({ color: colorPanel, transparent: true, opacity: 0.85, roughness: 0.15, metalness: 0.5, clearcoat: 0.2 });
+
+      const buildPanelBackground = (width, height) => {
+          const shape = createRoundedRectShape(width, height, 0.05); 
+          const geo = new THREE.ExtrudeGeometry(shape, { depth: 0.005, bevelEnabled: false });
+          geo.translate(0, 0, -0.0025);
+          const mesh = new THREE.Mesh(geo, panelGlassMat);
+          mesh.raycast = () => {}; 
+          return mesh;
+      };
+
+      // --- WRIST-MOUNTED UI DASHBOARD (DIRECT PARENTING) ---
+      const masterScale = 0.30; 
+      
+      const paletteGroup = new THREE.Group();
+      paletteGroup.scale.setScalar(masterScale);
+      paletteGroup.position.set(0.18, 0.10, -0.15); 
+      paletteGroup.rotation.set(-Math.PI / 4, Math.PI / 8, 0); 
+      
+      const pW = 0.90; const pH = 1.55; 
+      paletteGroup.add(buildPanelBackground(pW, pH));
+      engineRef.current.uiPanels.push(paletteGroup);
+
+      // Card 1: Architectures
+      const c1H = 0.38; const c1Y = 0.52;
+      paletteGroup.add(createXRCardBg(0.82, c1H, 0, c1Y));
+      paletteGroup.add(createXRTitle("SYSTEM ARCHITECTURE", 0, c1Y + 0.13, 0.82));
+      const modes = ['BIOMESH', 'TOWERS', 'A-FRAME', 'HORIZ-BED', 'ZIG-ZAG', 'DUTCH-BKT'];
+      const modeLabels = ['FREE MESH', 'TOWERS', 'A-FRAME', 'HORIZ BEDS', 'ZIG-ZAG', 'DUTCH BKT'];
+      modes.forEach((mode, idx) => {
+          paletteGroup.add(createXRButton(modeLabels[idx], 0.24, 0.07, -0.26 + ((idx % 3) * 0.24), c1Y + 0.03 - Math.floor(idx / 3) * 0.09, {actionType: 'MODE', value: mode}));
+      });
+
+      // Card 2: Crops
+      const c2H = 0.48; const c2Y = 0.05;
+      paletteGroup.add(createXRCardBg(0.82, c2H, 0, c2Y));
+      paletteGroup.add(createXRTitle("BOTANICAL SELECTION", 0, c2Y + 0.17, 0.82));
+      const crops = ['LETTUCE', 'BASIL', 'TOMATO', 'SPINACH', 'MINT', 'STRAWBERRY', 'KALE', 'CILANTRO', 'PEPPER'];
+      const cropLabels = ['LETTUCE', 'SWEET BASIL', 'VINE TOMATO', 'SPINACH', 'MINT', 'STRAWBERRY', 'CURLY KALE', 'CILANTRO', 'BELL PEPPER'];
+      crops.forEach((crop, idx) => {
+          const col = idx % 3; const row = Math.floor(idx / 3);
+          paletteGroup.add(createXRButton(cropLabels[idx], 0.24, 0.07, -0.26 + (col * 0.26), c2Y + 0.06 - (row * 0.10), {actionType: 'CROP', value: crop}, 0x10b981));
+      });
+
+      // Card 3: Dimensions & Tools
+      const c3H = 0.35; const c3Y = -0.40;
+      paletteGroup.add(createXRCardBg(0.82, c3H, 0, c3Y));
+      paletteGroup.add(createXRTitle("PARAMETRIC SCALING & TOOLS", 0, c3Y + 0.12, 0.82));
+      
+      paletteGroup.add(createXRButton("W-", 0.08, 0.07, -0.34, c3Y + 0.02, {actionType: 'ADJ_WIDTH', value: -0.2}));
+      paletteGroup.add(createXRButton("W+", 0.08, 0.07, -0.24, c3Y + 0.02, {actionType: 'ADJ_WIDTH', value: 0.2}));
+      paletteGroup.add(createXRButton("T-", 0.08, 0.07, -0.14, c3Y + 0.02, {actionType: 'ADJ_TIERS', value: -1}));
+      paletteGroup.add(createXRButton("T+", 0.08, 0.07, -0.04, c3Y + 0.02, {actionType: 'ADJ_TIERS', value: 1}));
+
+      const tools = [{id: 'MOVE', l: 'MOVE SYS'}, {id: 'ERASE', l: 'ERASE'}, {id: 'AUTO', l: 'AUTO GEN'}];
+      tools.forEach((tool, idx) => {
+          paletteGroup.add(createXRButton(tool.l, 0.20, 0.07, -0.26 + (idx * 0.26), c3Y - 0.08, {actionType: 'TOOL', value: tool.id}, tool.id === 'ERASE' ? null : null, tool.id === 'ERASE'));
+      });
+
+      // Simulation Toggles (Bottom Row)
+      const envControls = [{id: 'TOGGLE_TIME', l: 'PLAY SUN'}, {id: 'TOGGLE_GROWTH', l: 'PLAY CROP'}, {id: 'TOGGLE_GUIDE', l: 'HIDE GUIDE'}];
+      envControls.forEach((ctrl, idx) => {
+          const isGuide = ctrl.id === 'TOGGLE_GUIDE';
+          const btn = createXRButton(ctrl.l, 0.24, 0.07, -0.26 + (idx * 0.26), -0.68, {actionType: ctrl.id, value: ctrl.id}, isGuide ? null : null, isGuide);
+          paletteGroup.add(btn);
+          if (isGuide) engineRef.current.toggleGuideBtn = btn;
+      });
+
+      const aiAssistantOrbiter = new THREE.Group();
+      aiAssistantOrbiter.position.set(0, pH/2 + 0.06, 0.03); 
+      const aiBg = new THREE.Mesh(new THREE.IcosahedronGeometry(0.06, 2), new THREE.MeshPhysicalMaterial({
+         color: 0x0ea5e9, roughness: 0.1, transmission: 0.6, thickness: 1, emissive: 0x0ea5e9, emissiveIntensity: 0.4
+      }));
+      aiAssistantOrbiter.add(aiBg);
+      engineRef.current.aiVisualizer = aiBg;
+
+      const aiText = createCrispTextSprite("GEMINI COPILOT ACTIVE", { physicalHeight: 0.035, canvasWidth: 1024, textColor: '#38bdf8' });
+      aiText.position.set(0, 0.11, 0);
+      aiAssistantOrbiter.add(aiText);
+      engineRef.current.aiText = aiText; 
+      paletteGroup.add(aiAssistantOrbiter);
+
+      // --- PANEL 2: ASSEMBLY BLUEPRINT PANEL (Child of Wrist UI) ---
+      const guideGroup = new THREE.Group();
+      guideGroup.position.set(0.95, 0, 0.15); 
+      guideGroup.rotation.y = -Math.PI / 6; 
+      
+      guideGroup.add(buildPanelBackground(0.85, 1.30));
+      engineRef.current.guideGroup = guideGroup;
+
+      const cGuideH = 1.00; const cGuideY = -0.05;
+      guideGroup.add(createXRCardBg(0.78, cGuideH, 0, cGuideY));
+
+      guideGroup.add(createXRTitle("ASSEMBLY NAVIGATOR", 0, 0.54, 0.85));
+      const aControls = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; 
+      aCo
